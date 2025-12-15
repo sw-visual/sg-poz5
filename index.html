@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>360 Object Viewer</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="three.min.js"></script>
+  <script>
+    // === Настройки ===
+    const TOTAL_FRAMES = 57;
+    const FRAME_PATH = i => `frames/sg_poz2_360_${String(i).padStart(4, '0')}.jpg`;
+
+    const IMAGE_WIDTH = 1920;
+    const IMAGE_HEIGHT = 1080;
+    const ASPECT = IMAGE_WIDTH / IMAGE_HEIGHT; // 16:9
+
+    // === Сцена и ПЕРСПЕКТИВНАЯ камера (проще и надёжнее для твоего случая) ===
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 2;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    // === Загрузка текстур ===
+    const textureLoader = new THREE.TextureLoader();
+    const textures = [];
+    for (let i = 1; i <= TOTAL_FRAMES; i++) {
+      const tex = textureLoader.load(FRAME_PATH(i));
+      tex.colorSpace = THREE.NoColorSpace;
+      tex.minFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      textures[i - 1] = tex;
+    }
+
+    // === Плоскость с правильным соотношением ===
+    const PLANE_WIDTH = 2.54;
+    const PLANE_HEIGHT = PLANE_WIDTH / ASPECT; // ≈1.125
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(PLANE_WIDTH, PLANE_HEIGHT),
+      new THREE.MeshBasicMaterial({ map: textures[0], side: THREE.DoubleSide })
+    );
+    scene.add(plane);
+
+    // === Обновление размера ===
+    function resize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    resize();
+
+    // === Вращение ===
+    let currentAngle = 0;
+    function updateFrame() {
+      let idx = Math.round(currentAngle) % TOTAL_FRAMES;
+      if (idx < 0) idx += TOTAL_FRAMES;
+      plane.material.map = textures[idx];
+    }
+
+    // === Управление (мышь + тач) ===
+    let isDragging = false;
+    let startX = 0;
+
+    window.addEventListener('mousedown', e => {
+      isDragging = true;
+      startX = e.clientX;
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', e => {
+      if (!isDragging) return;
+      currentAngle += (e.clientX - startX) * 0.5;
+      startX = e.clientX;
+      updateFrame();
+    });
+
+    window.addEventListener('mouseup', () => isDragging = false);
+    window.addEventListener('mouseleave', () => isDragging = false);
+
+    window.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        startX = e.touches[0].clientX;
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('touchmove', e => {
+      if (!isDragging || e.touches.length !== 1) return;
+      currentAngle += (e.touches[0].clientX - startX) * 0.5;
+      startX = e.touches[0].clientX;
+      updateFrame();
+      e.preventDefault();
+    });
+
+    window.addEventListener('touchend', () => isDragging = false);
+    window.addEventListener('touchcancel', () => isDragging = false);
+
+    // === Анимация ===
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', resize);
+  </script>
+</body>
+</html>
